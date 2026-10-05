@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Premium Mini-CRM: Hệ Thống Học Từ Vựng</title>
+  <meta name="description" content="Hệ thống hỗ trợ học từ vựng tiếng Anh với Gamification và Spaced Repetition">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body style="display: flex; flex-direction: column; min-height: 100vh; background: var(--color-background);">
+  
+  <!-- Header / Floating Menu Button -->
+  <header id="app-header">
+    <div style="display: flex; align-items: center; gap: var(--spacing-lg); pointer-events: auto;">
+      <!-- Hamburger for Both Mobile and PC -->
+      <button id="mobile-menu-btn" class="btn btn-outline hidden" style="border: none; font-size: 1.5rem; padding: 4px 8px; background: white; box-shadow: var(--shadow-sm); border-radius: var(--border-radius-md);">☰</button>
+    </div>
+  </header>
+
+  <!-- Mobile Fullscreen Menu -->
+  <div id="mobile-fullscreen-menu" class="custom-alert-overlay hidden" style="align-items: flex-start; justify-content: flex-start; opacity: 0; pointer-events: none;">
+    <div style="width: 100%; height: 100%; background: white; padding: var(--spacing-lg); display: flex; flex-direction: column;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--color-border); padding-bottom: var(--spacing-sm);">
+        
+        <!-- User Profile Area Mobile -->
+        <div>
+          <div id="user-profile-mobile" class="user-profile-class hidden" style="display: flex; flex-direction: column; gap: 4px;">
+            <span class="user-name-class" style="font-weight: 600; font-size: 1.2rem;">Guest</span>
+            <span class="user-role-class badge badge-warning" style="align-self: flex-start; display: none;">Unauthenticated</span>
+            <button class="logout-btn-class btn btn-outline btn-sm" style="margin-top: 8px;">Đăng Xuất</button>
+          </div>
+        </div>
+
+        <button id="close-menu-btn" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--color-text-main);">✖</button>
+      </div>
+      <nav id="mobile-nav" style="display: flex; flex-direction: column; gap: var(--spacing-md); font-size: 1.2rem;">
+        <a href="#" data-route="dashboard" class="mobile-menu-link active">Dashboard</a>
+        <a href="#" data-route="management" class="mobile-menu-link hidden role-parent role-teacher">Quản Lý Lớp/Con</a>
+        <a href="#" data-route="settings" class="mobile-menu-link">Cài Đặt</a>
+      </nav>
+    </div>
+  </div>
+
+  <!-- Main Content Area -->
+  <main id="main-content" class="main-content">
+    
+    <!-- View Login -->
+    <section id="view-login" class="view-section hidden">
+      <div class="card" style="max-width: 400px; margin: 40px auto; text-align: center;">
+        <h2>Đăng Nhập / Đăng Ký</h2>
+        <p class="text-muted mb-md">Đăng nhập để lưu tiến độ học tập</p>
+        <div style="margin-top: var(--spacing-lg);">
+          <button id="btn-login-google" class="btn btn-primary btn-large" style="width: 100%; margin-bottom: var(--spacing-md);">Đăng nhập bằng Google</button>
+          <p class="text-muted" style="font-size: 0.85rem;">(Hỗ trợ Đăng nhập bằng Email/Password sẽ được tích hợp sau)</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- View Dashboard -->
+    <section id="view-dashboard" class="view-section active">
+      <!-- Sẽ được fill bằng JS dashboard.js -->
+      <div class="card"><p class="text-muted">Đang tải...</p></div>
+    </section>
+
+    <!-- View Learn (Màn hình 2, thay vì dùng sidebar) -->
+    <section id="view-learn" class="view-section hidden">
+      <!-- Back button will be injected here if needed, or via Dashboard -->
+      <div class="card gamified-container text-center">
+        <h2>Sẵn sàng cho bài học?</h2>
+        <button class="btn btn-primary btn-large mt-md">Bắt Đầu Session</button>
+      </div>
+    </section>
+
+    <!-- View Management -->
+    <section id="view-management" class="view-section hidden">
+      <h2>Danh Sách Học Sinh</h2>
+      <div class="data-grid">
+        <!-- Sẽ được fill bằng JS -->
+      </div>
+    </section>
+
+    <!-- View Settings -->
+    <section id="view-settings" class="view-section hidden">
+      <div class="card" style="max-width: 600px; margin: 0 auto;">
+        <h2 style="margin-bottom: var(--spacing-lg);">Cài Đặt Cá Nhân</h2>
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: var(--spacing-md); border-bottom: 1px solid var(--color-border);">
+          <div>
+            <div style="font-weight: 600; font-size: 1.1rem;">Âm thanh hiệu ứng (SFX)</div>
+            <div class="text-muted" style="font-size: 0.9rem;">Bật/tắt âm thanh khi trả lời đúng, sai hoặc tương tác.</div>
+          </div>
+          <!-- Toggle Switch CSS -->
+          <label class="switch" style="position: relative; display: inline-block; width: 50px; height: 28px;">
+            <input type="checkbox" id="toggle-sfx" checked style="opacity: 0; width: 0; height: 0;">
+            <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; transition: .4s; border-radius: 34px;"></span>
+          </label>
+        </div>
+        <p id="settings-status-msg" class="text-muted" style="font-size: 0.85rem; margin-top: var(--spacing-sm); min-height: 20px;"></p>
+      </div>
+      <div id="admin-settings-container" style="max-width: 600px; margin: var(--spacing-lg) auto;"></div>
+    </section>
+  </main>
+
+  <!-- Footer Load Dynamic -->
+  <footer id="app-footer" style="padding: var(--spacing-lg); text-align: center; margin-top: auto; border-top: 1px solid var(--color-border); background: white;">
+    <h2 style="color: var(--color-primary); margin-bottom: 8px;">EngLingo</h2>
+    <!-- Khu vực load nội dung footer.js -->
+    <div id="external-footer-content"></div>
+  </footer>
+
+  <!-- Scripts -->
+  <script type="module" src="./js/app.js"></script>
+  <!-- <script src="URL_CUA_FOOTER_JS_DANG_CHO"></script> -->
+</body>
+</html>
