@@ -19,9 +19,11 @@ const GAME_MODES = [
 ];
 
 export class LearningSession {
-  constructor(userId, sessionSize = 10) {
+  constructor(userId, sessionSize = 10, topicId = null, stageIndex = null) {
     this.userId = userId;
     this.sessionSize = sessionSize;
+    this.topicId = topicId;
+    this.stageIndex = stageIndex;
     this.queue = [];        // Hàng đợi các câu hỏi trong session này
     this.currentIndex = 0;  // Vị trí hiện tại
     this.results = [];      // Kết quả lưu tạm (batch logs)
@@ -40,57 +42,115 @@ export class LearningSession {
         throw new Error("Không có từ vựng nào trong LocalDB. Vui lòng tải lại trang hoặc đợi quá trình đồng bộ.");
       }
 
-      // Phân loại từ
-      const dueWords = [];
-      const newWords = [];
-
-      allWords.forEach(word => {
-        const progress = userProgressMap[word.id];
-        if (!progress) {
-          newWords.push(word); // Từ chưa học bao giờ
-        } else if (isDueForReview(progress.nextReviewDate)) {
-          dueWords.push({ word, progress }); // Từ đến hạn ôn
+      // Nếu có chọn Topic cụ thể, lọc từ theo Topic đó
+      let candidateWords = allWords;
+      if (this.topicId) {
+        const filtered = allWords.filter(w => w.topic === this.topicId);
+        if (filtered.length > 0) {
+          candidateWords = filtered;
         }
-      });
-
-      // Ưu tiên ôn tập (Review) trước, nếu chưa đủ quota thì bù từ mới (New)
-      let selectedItems = [];
-      
-      // Lọc từ theo chế độ Giao Bài (Nhiệm vụ)
-      let targetReviewQuota = Math.floor(this.sessionSize * 0.8);
-      
-      if (window.activeTask) {
-        if (window.activeTask.taskType === 'new_words') {
-          targetReviewQuota = 0; // 100% Học từ mới
-        } else if (window.activeTask.taskType === 'review_words') {
-          targetReviewQuota = this.sessionSize; // 100% Ôn tập
-        }
-        console.log("🚀 Starting Session from Task:", window.activeTask.title, "| Quota Review:", targetReviewQuota);
-        // Clear active task after using it for initialization
-        window.activeTask = null;
       }
-      
-      const reviewQuota = targetReviewQuota;
-      
-      // Trộn ngẫu nhiên danh sách dueWords
-      this.shuffleArray(dueWords);
-      this.shuffleArray(newWords);
 
-      selectedItems = dueWords.slice(0, reviewQuota).map(item => ({
-        ...item.word,
-        isReview: true,
-        progress: item.progress
-      }));
+      let selectedItems = [];
 
-      // Bù từ mới vào phần còn thiếu
-      const remainingQuota = this.sessionSize - selectedItems.length;
-      const selectedNew = newWords.slice(0, remainingQuota).map(word => ({
-        ...word,
-        isReview: false,
-        progress: null
-      }));
+      // TRƯỜNG HỢP 1: Học theo Ải cụ thể trong Màn chơi (Stage in Topic)
+      if (this.topicId && this.stageIndex !== null && this.stageIndex !== undefined) {
+        const start = this.stageIndex * this.sessionSize;
+        const end = start + this.sessionSize;
+        let stageWords = candidateWords.slice(start, end);
 
-      selectedItems = [...selectedItems, ...selectedNew];
+        // Nếu ải cuối có ít hơn 10 từ, bù thêm từ trong cùng topic để đủ 10 câu
+        if (stageWords.length < this.sessionSize && candidateWords.length > stageWords.length) {
+          const otherWords = candidateWords.filter(w => !stageWords.some(sw => sw.id === w.id));
+          this.shuffleArray(otherWords);
+          stageWords = [...stageWords, ...otherWords.slice(0, this.sessionSize - stageWords.length)];
+        }
+
+        // Phân loại trong ải: Từ đến hạn ôn -> Từ mới -> Từ củng cố
+        const stageDue = [];
+        const stageNew = [];
+        const stageReinforce = [];
+
+        stageWords.forEach(word => {
+          const progress = userProgressMap[word.id];
+          if (!progress) {
+            stageNew.push(word);
+          } else if (isDueForReview(progress.nextReviewDate)) {
+            stageDue.push({ word, progress });
+          } else {
+            stageReinforce.push({ word, progress });
+          }
+        });
+
+        this.shuffleArray(stageDue);
+        this.shuffleArray(stageNew);
+        this.shuffleArray(stageReinforce);
+
+        const stageItems = [
+          ...stageDue.map(item => ({ ...item.word, isReview: true, progress: item.progress })),
+          ...stageNew.map(word => ({ ...word, isReview: false, progress: null })),
+          ...stageReinforce.map(item => ({ ...item.word, isReview: true, progress: item.progress }))
+        ];
+
+        selectedItems = stageItems.slice(0, this.sessionSize);
+      } else {
+        // TRƯỜNG HỢP 2: Học SRS thông thường hoặc theo Task
+        const dueWords = [];
+        const newWords = [];
+
+        candidateWords.forEach(word => {
+          const progress = userProgressMap[word.id];
+          if (!progress) {
+            newWords.push(word);
+          } else if (isDueForReview(progress.nextReviewDate)) {
+            dueWords.push({ word, progress });
+          }
+        });
+
+        let targetReviewQuota = Math.floor(this.sessionSize * 0.8);
+        
+        if (window.activeTask) {
+          if (window.activeTask.taskType === 'new_words') {
+            targetReviewQuota = 0; // 100% Học từ mới
+          } else if (window.activeTask.taskType === 'review_words') {
+            targetReviewQuota = this.sessionSize; // 100% Ôn tập
+          }
+          console.log("🚀 Starting Session from Task:", window.activeTask.title, "| Quota Review:", targetReviewQuota);
+          window.activeTask = null;
+        }
+        
+        const reviewQuota = targetReviewQuota;
+        
+        this.shuffleArray(dueWords);
+        this.shuffleArray(newWords);
+
+        selectedItems = dueWords.slice(0, reviewQuota).map(item => ({
+          ...item.word,
+          isReview: true,
+          progress: item.progress
+        }));
+
+        const remainingQuota = this.sessionSize - selectedItems.length;
+        const selectedNew = newWords.slice(0, remainingQuota).map(word => ({
+          ...word,
+          isReview: false,
+          progress: null
+        }));
+
+        selectedItems = [...selectedItems, ...selectedNew];
+
+        // Nếu vẫn chưa đủ (ví dụ do topic ít từ), bù thêm từ đã học
+        if (selectedItems.length < this.sessionSize && candidateWords.length > selectedItems.length) {
+          const remaining = candidateWords.filter(w => !selectedItems.some(si => si.id === w.id));
+          this.shuffleArray(remaining);
+          const extra = remaining.slice(0, this.sessionSize - selectedItems.length).map(word => ({
+            ...word,
+            isReview: true,
+            progress: userProgressMap[word.id] || null
+          }));
+          selectedItems = [...selectedItems, ...extra];
+        }
+      }
       
       // Shuffle lại lần cuối để không đoán được logic
       this.shuffleArray(selectedItems);

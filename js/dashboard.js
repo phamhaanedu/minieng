@@ -4,6 +4,8 @@ import { isDueForReview } from './srs.js';
 import { db as firestoreDb } from './firebase-config.js';
 import { collection, query, where, getDocs, doc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore.js";
 import { renderManagement } from './management.js';
+import { calculateTopicStages } from './topics.js';
+import { getLocalWords } from './db.js';
 
 /**
  * Render Dashboard content based on user role and progress
@@ -61,7 +63,12 @@ export async function renderDashboard() {
       }
     });
 
-    const masteryPercent = totalLearned > 0 ? Math.min(100, Math.round((totalLearned / 3000) * 100)) : 0;
+    // Lấy toàn bộ từ trong LocalDB để tính toán Cây Chủ Đề & Các Ải
+    const allWords = await getLocalWords();
+    const topicStages = calculateTopicStages(allWords, progressMap);
+    const goldenStarCount = topicStages.filter(t => t.isMastered100).length;
+
+    const masteryPercent = totalLearned > 0 ? Math.min(100, Math.round((totalLearned / (allWords.length || 1707)) * 100)) : 0;
     
     // Semantic Colors based on dueCount
     let dueBadgeColor = 'var(--color-success)'; // Xanh nếu ít bài tập
@@ -154,6 +161,12 @@ export async function renderDashboard() {
           <span class="badge" style="background: ${dueBadgeColor}; color: white; margin-top: var(--spacing-sm);">Đến hạn</span>
         </div>
         
+        <div class="card text-center">
+          <h3 class="text-muted" style="font-size: 1rem; margin-bottom: var(--spacing-sm);">Màn đạt sao vàng</h3>
+          <h1 style="font-size: 2.5rem; color: #F59E0B;">${goldenStarCount} <span style="font-size: 1rem; color: var(--color-text-muted);">/ ${topicStages.length}</span></h1>
+          <span class="badge" style="background: #FEF3C7; color: #D97706; margin-top: var(--spacing-sm); font-weight: 600;">⭐ Thuộc 100%</span>
+        </div>
+
         ${pendingTasksCount > 0 ? `
         <div class="card text-center" style="cursor: pointer; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2); border-color: var(--color-danger);" onclick="window.startTaskSession()">
           <h3 class="text-muted" style="font-size: 1rem; margin-bottom: var(--spacing-sm);">Nhiệm vụ được giao</h3>
@@ -164,7 +177,65 @@ export async function renderDashboard() {
       </div>
 
       <div class="text-center" style="margin-bottom: var(--spacing-xl);">
-        <button id="btn-start-learning-dashboard" class="btn btn-primary btn-large" style="padding: 16px 32px; font-size: 1.25rem; box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);">🚀 Bắt Đầu Bài Học Ngay</button>
+        <button id="btn-start-learning-dashboard" class="btn btn-primary btn-large" style="padding: 16px 36px; font-size: 1.25rem; box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);">🚀 Chơi Ngay (Tiếp Tục Vượt Ải)</button>
+      </div>
+
+      <!-- BẢN ĐỒ MÀN CHƠI / CÂY CHỦ ĐỀ (TOPIC STAGE MAP) -->
+      <div class="topic-tree-section">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
+          <div>
+            <h2 style="margin: 0; font-size: 1.4rem;">🗺️ Bản Đồ Màn Chơi (Cây Chủ Đề)</h2>
+            <p class="text-muted" style="font-size: 0.9rem; margin-top: 2px;">Vượt qua các ải (10 từ/ải). Học thuộc 100% để mở khóa Sao Vàng ⭐ cho từng chủ đề!</p>
+          </div>
+          <div class="badge-gold-star">
+            ⭐ ${goldenStarCount} / ${topicStages.length} Màn Sao Vàng
+          </div>
+        </div>
+
+        <div class="topic-grid">
+          ${topicStages.map(t => `
+            <div class="topic-stage-card ${t.isMastered100 ? 'mastered' : ''}" id="card-topic-${t.topicId}">
+              <div>
+                <div class="topic-stage-header">
+                  <div class="stage-avatar">${t.icon}</div>
+                  <div class="stage-title-wrap">
+                    <div class="stage-title">${t.name}</div>
+                    <div class="stage-subtitle">${t.nameEn} • ${t.totalWords} từ</div>
+                  </div>
+                  ${t.isMastered100 ? `<span class="badge-gold-star">⭐ SAO VÀNG</span>` : `<span class="badge" style="background: var(--color-background); font-weight: 700; color: var(--color-primary);">${t.progressPercent}%</span>`}
+                </div>
+
+                <div class="stage-progress-info">
+                  <span class="text-muted" style="font-size: 0.8rem;">Đã thuộc: ${t.masteredCount}/${t.totalWords} từ</span>
+                  <span class="text-muted" style="font-size: 0.8rem;">${t.totalStages} Ải</span>
+                </div>
+                
+                <div class="health-bar-container" style="height: 6px; margin-bottom: var(--spacing-sm);">
+                  <div class="health-bar-fill" style="width: ${t.progressPercent}%; background: ${t.isMastered100 ? 'linear-gradient(90deg, #F59E0B, #FBBF24)' : 'var(--color-primary)'};"></div>
+                </div>
+              </div>
+
+              <!-- Danh sách các Ải trong Màn -->
+              <div class="stage-nodes-wrap">
+                <div class="stage-nodes-label">
+                  <span>Chọn ải để học (10 từ/lượt):</span>
+                  ${!t.isMastered100 ? `<span style="color: var(--color-primary); cursor: pointer;" onclick="window.playTopicStage('${t.topicId}', ${t.nextStageIndex})">Chơi ải ${t.nextStageIndex + 1} ▶</span>` : ''}
+                </div>
+                <div class="stage-nodes-list">
+                  ${t.stages.map(s => `
+                    <button 
+                      class="stage-node-btn ${s.isCompleted ? 'completed' : (s.stageIndex === t.nextStageIndex && !t.isMastered100 ? 'active' : '')}"
+                      onclick="window.playTopicStage('${t.topicId}', ${s.stageIndex})"
+                      title="Ải ${s.stageNumber}: ${s.masteredInStage}/${s.totalInStage} từ thuộc"
+                    >
+                      ${s.isCompleted ? `Ải ${s.stageNumber} ✔` : (s.stageIndex === t.nextStageIndex && !t.isMastered100 ? `Ải ${s.stageNumber} ▶` : `Ải ${s.stageNumber}`)}
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
       </div>
     `;
 
@@ -176,24 +247,35 @@ export async function renderDashboard() {
 
     viewDashboard.innerHTML = html;
 
+    // Helper toàn cục để bấm vào từng Ải trên Bản đồ Màn chơi
+    window.playTopicStage = function(topicId, stageIndex) {
+      document.querySelectorAll('.view-section').forEach(s => {
+        s.classList.remove('active');
+        s.classList.add('hidden');
+      });
+      const viewLearn = document.getElementById('view-learn');
+      if (viewLearn) {
+        viewLearn.classList.remove('hidden');
+        viewLearn.classList.add('active');
+      }
+      if (window.startLearningSession) {
+        window.startLearningSession(user.uid, topicId, stageIndex);
+      }
+    };
+
     // Bắt sự kiện Start Learning
     const btnStart = document.getElementById('btn-start-learning-dashboard');
     if (btnStart) {
       btnStart.addEventListener('click', () => {
-        const btnRealStart = document.querySelector('#view-learn .btn-primary');
-        if (btnRealStart) {
-          // Kích hoạt nút bên view-learn (đã được bind trong app.js gọi startLearningSession)
-          // Và đồng thời ẩn dashboard, hiện view-learn
-          document.querySelectorAll('.view-section').forEach(s => {
-            s.classList.remove('active');
-            s.classList.add('hidden');
-          });
-          const viewLearn = document.getElementById('view-learn');
-          viewLearn.classList.remove('hidden');
-          viewLearn.classList.add('active');
-          
-          btnRealStart.click();
+        // Nếu có task, ưu tiên làm task
+        if (window.appPendingTasks && window.appPendingTasks.length > 0) {
+          window.startTaskSession();
+          return;
         }
+
+        // Ngược lại, tìm màn đầu tiên chưa đạt Sao Vàng và ải tiếp theo
+        const nextTopic = topicStages.find(t => !t.isMastered100) || topicStages[0];
+        window.playTopicStage(nextTopic.topicId, nextTopic.nextStageIndex);
       });
     }
 

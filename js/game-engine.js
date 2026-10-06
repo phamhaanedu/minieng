@@ -1,6 +1,7 @@
 import { LearningSession } from './session-manager.js';
 import { getLocalWords, getUserProgress, saveSessionResults } from './db.js';
 import { isSfxEnabled } from './settings.js';
+import { TOPIC_METADATA } from './topics.js';
 
 let currentSession = null;
 let audioCtx = null;
@@ -104,19 +105,30 @@ const sessionProgressFill = document.getElementById('session-progress-fill');
 /**
  * Khởi tạo và bắt đầu một phiên học mới
  */
-export async function startLearningSession(userId) {
+export async function startLearningSession(userId, topicId = null, stageIndex = null) {
   try {
-    currentSession = new LearningSession(userId, 10);
+    currentSession = new LearningSession(userId, 10, topicId, stageIndex);
     viewLearn.innerHTML = `<div class="text-center"><p>Đang tải dữ liệu học tập...</p></div>`;
     
     // Tải tiến độ SRS hiện tại của user từ Firebase
     const userProgressMap = await getUserProgress(userId); 
     
     await currentSession.initialize(userProgressMap);
+
+    const topicInfo = topicId && TOPIC_METADATA[topicId] ? TOPIC_METADATA[topicId] : null;
+    const stageTitle = topicInfo 
+      ? `${topicInfo.icon} ${topicInfo.name} ${stageIndex !== null ? `• Ải ${stageIndex + 1}` : ''}`
+      : '🎯 Phiên Học Tổng Hợp (SRS)';
     
     // Setup UI skeleton
     viewLearn.innerHTML = `
       <div class="card" style="max-width: 600px; margin: 0 auto;">
+        <!-- Header Chủ Đề & Ải -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm);">
+          <span style="font-weight: 600; font-size: 1rem; color: var(--color-primary);">${stageTitle}</span>
+          <button id="btn-exit-learning" class="btn btn-outline" style="padding: 4px 10px; font-size: 0.85rem;">Thoát</button>
+        </div>
+
         <!-- Thanh Tiến Độ -->
         <div class="health-bar-container">
           <div class="health-bar-fill" id="session-progress-fill" style="width: 0%;"></div>
@@ -134,6 +146,13 @@ export async function startLearningSession(userId) {
       </div>
     `;
 
+    // Nút Thoát
+    document.getElementById('btn-exit-learning').addEventListener('click', () => {
+      if (confirm("Bạn có chắc muốn thoát bài học về bản đồ chủ đề không?")) {
+        location.reload();
+      }
+    });
+
     // Gắn sự kiện cho nút Tiếp tục
     document.getElementById('btn-next-question').addEventListener('click', () => {
       document.getElementById('game-feedback').classList.add('hidden');
@@ -146,6 +165,9 @@ export async function startLearningSession(userId) {
     viewLearn.innerHTML = `<div class="card text-center"><p class="text-danger">${error.message}</p></div>`;
   }
 }
+
+// Global hook để gọi từ Dashboard Stage Cards
+window.startLearningSession = startLearningSession;
 
 /**
  * Hiển thị câu hỏi tiếp theo
@@ -734,13 +756,19 @@ function renderSessionComplete() {
   
   const correctCount = results.filter(r => r.isCorrect).length;
 
+  const topicInfo = currentSession.topicId && TOPIC_METADATA[currentSession.topicId] ? TOPIC_METADATA[currentSession.topicId] : null;
+  const stageNotice = topicInfo
+    ? `<p style="font-size: 1.1rem; color: var(--color-primary); margin-top: var(--spacing-xs);"><strong>${topicInfo.icon} ${topicInfo.name}</strong> • Hoàn thành Ải ${currentSession.stageIndex !== null ? currentSession.stageIndex + 1 : 1}!</p>`
+    : '';
+
   container.innerHTML = `
     <div class="text-center">
-      <h1 style="font-size: 3rem; margin-bottom: var(--spacing-sm);">🏆</h1>
-      <h2>Hoàn thành bài học!</h2>
-      <p class="text-muted">Bạn đã trả lời đúng ${correctCount}/${results.length} câu.</p>
+      <h1 style="font-size: 3.5rem; margin-bottom: var(--spacing-sm);">🏆</h1>
+      <h2>Vượt Ải Thành Công!</h2>
+      ${stageNotice}
+      <p class="text-muted" style="margin-top: var(--spacing-xs);">Bạn đã trả lời đúng ${correctCount}/${results.length} câu trong lượt này.</p>
       
-      <button id="btn-finish-session" class="btn btn-primary btn-large mt-md">Kết thúc & Lưu kết quả</button>
+      <button id="btn-finish-session" class="btn btn-primary btn-large mt-md" style="font-size: 1.1rem; padding: 12px 28px;">Kết Thúc & Nhận Thưởng ⭐</button>
     </div>
   `;
 
