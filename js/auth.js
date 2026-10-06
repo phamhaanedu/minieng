@@ -1,5 +1,5 @@
 import { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged } from './firebase-config.js';
-import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore.js";
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, addDoc } from "https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore.js";
 import { syncMasterData } from './db.js';
 import { renderDashboard } from './dashboard.js';
 import { initSettings } from './settings.js';
@@ -159,4 +159,154 @@ function updateRoleUI(role) {
   if (role === 'admin') {
     adminItems.forEach(el => el.classList.remove('hidden'));
   }
+}
+
+// Logic cho Account Management Panel
+const btnOpenAccountPanel = document.getElementById('btn-open-account-panel');
+const accountPanel = document.getElementById('account-management-panel');
+const btnCloseAccountPanel = document.getElementById('close-account-panel-btn');
+const inputDisplayName = document.getElementById('account-display-name');
+const btnUpdateName = document.getElementById('btn-update-name');
+
+const accountLinkSection = document.getElementById('account-link-section');
+const inputLinkEmail = document.getElementById('link-student-email');
+const btnLinkStudent = document.getElementById('btn-link-student');
+
+if (btnOpenAccountPanel && accountPanel) {
+  btnOpenAccountPanel.addEventListener('click', () => {
+    if (!currentUser) return;
+    
+    // Gán tên hiện tại vào input
+    inputDisplayName.value = currentUser.displayName || currentUser.email;
+    
+    // Đọc role từ UI hoặc biến (ở đây lấy từ class trên màn hình)
+    const roleBadge = document.querySelector('.user-role-class');
+    const roleEl = roleBadge ? roleBadge.textContent.toLowerCase() : 'child';
+    
+    // Luôn hiển thị phần Liên kết cho tất cả mọi người
+    accountLinkSection.style.display = 'block';
+
+    accountPanel.classList.remove('hidden');
+    accountPanel.style.opacity = '1';
+    accountPanel.style.pointerEvents = 'auto';
+  });
+
+  btnCloseAccountPanel.addEventListener('click', () => {
+    accountPanel.style.opacity = '0';
+    accountPanel.style.pointerEvents = 'none';
+    setTimeout(() => accountPanel.classList.add('hidden'), 200);
+  });
+}
+
+if (btnUpdateName) {
+  btnUpdateName.addEventListener('click', async () => {
+    const newName = inputDisplayName.value.trim();
+    if (!newName) {
+      window.showCustomAlert("Tên hiển thị không được để trống!", "error");
+      return;
+    }
+
+    btnUpdateName.disabled = true;
+    btnUpdateName.textContent = "Đang lưu...";
+    
+    try {
+      const userRef = doc(db, "users", currentUser.uid);
+      await updateDoc(userRef, { displayName: newName });
+      
+      currentUser.displayName = newName; // update local
+      
+      // Update UI
+      document.querySelectorAll('.user-name-class').forEach(el => {
+        el.textContent = newName;
+      });
+      
+      window.showCustomAlert("Cập nhật tên thành công!", "success");
+    } catch (e) {
+      window.showCustomAlert("Lỗi: " + e.message, "error");
+    } finally {
+      btnUpdateName.disabled = false;
+      btnUpdateName.textContent = "Cập nhật";
+    }
+  });
+}
+
+if (btnLinkStudent) {
+  btnLinkStudent.addEventListener('click', async () => {
+    const email = inputLinkEmail.value.trim();
+    if (!email) {
+      window.showCustomAlert("Vui lòng nhập Email học sinh!", 'error');
+      return;
+    }
+    
+    btnLinkStudent.disabled = true;
+    btnLinkStudent.textContent = "Đang gửi...";
+    
+    try {
+      // Đọc role
+      const roleBadge = document.querySelector('.user-role-class');
+      const roleEl = roleBadge ? roleBadge.textContent.toLowerCase() : 'parent';
+
+      // Tìm user theo email (chỉ tìm tài khoản child)
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("email", "==", email), where("role", "==", "child"));
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        window.showCustomAlert("Không tìm thấy tài khoản Học sinh (Child) nào với Email này!", 'error');
+      } else {
+        const childDoc = snapshot.docs[0];
+        const childData = childDoc.data();
+        
+        if (childData.manager_id) {
+          window.showCustomAlert("Tài khoản này đã được quản lý bởi một người khác. Không thể gửi yêu cầu!", 'error');
+          return;
+        }
+        
+        // Kiểm tra xem đã có request nào pending chưa
+        const reqQuery = query(collection(db, "link_requests"), 
+          where("targetId", "==", childDoc.id),
+          where("requesterId", "==", currentUser.uid),
+          where("status", "==", "pending")
+        );
+        const reqSnap = await getDocs(reqQuery);
+        
+        if (!reqSnap.empty) {
+          window.showCustomAlert("Bạn đã gửi yêu cầu liên kết cho tài khoản này rồi, đang chờ xác nhận!", 'warning');
+        } else {
+          // Nếu requester đang là child, tự động nâng cấp thành parent
+          let finalRole = roleEl;
+          if (roleEl === 'child') {
+            await updateDoc(doc(db, "users", currentUser.uid), { role: 'parent' });
+            finalRole = 'parent';
+            
+            // Cập nhật lại giao diện Role cho requester
+            document.querySelectorAll('.user-role-class').forEach(el => {
+              el.textContent = 'PARENT';
+              el.className = 'user-role-class badge badge-success';
+            });
+            updateRoleUI('parent');
+          }
+
+          // Tạo request liên kết
+          await addDoc(collection(db, "link_requests"), {
+            requesterId: currentUser.uid,
+            requesterName: currentUser.displayName || currentUser.email,
+            requesterRole: finalRole,
+            targetEmail: email,
+            targetId: childDoc.id,
+            status: 'pending',
+            createdAt: new Date().toISOString()
+          });
+          
+          window.showCustomAlert("Đã gửi yêu cầu liên kết! Chờ học sinh đăng nhập để xác nhận.", 'success');
+          inputLinkEmail.value = '';
+        }
+      }
+    } catch (error) {
+      window.showCustomAlert("Lỗi khi gửi yêu cầu: " + error.message, 'error');
+    } finally {
+      btnLinkStudent.disabled = false;
+      btnLinkStudent.textContent = "Gửi Yêu Cầu";
+    }
+  });
 }

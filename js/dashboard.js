@@ -3,6 +3,7 @@ import { getUserProgress, getUserStats, getActiveStreak } from './db.js';
 import { isDueForReview } from './srs.js';
 import { db as firestoreDb } from './firebase-config.js';
 import { collection, query, where, getDocs, doc, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.5.0/firebase-firestore.js";
+import { renderManagement } from './management.js';
 
 /**
  * Render Dashboard content based on user role and progress
@@ -167,16 +168,9 @@ export async function renderDashboard() {
       </div>
     `;
 
-    // Nếu Role = Teacher hoặc Admin hoặc Parent, hiển thị thêm Quick Actions
     if (roleEl === 'admin' || roleEl === 'teacher' || roleEl === 'parent') {
       html += `
-        <div class="card">
-          <h3 style="margin-bottom: var(--spacing-md);">Lối tắt quản lý (Quick Actions)</h3>
-          <div style="display: flex; gap: var(--spacing-sm); flex-wrap: wrap;">
-            <button class="btn btn-primary" onclick="document.querySelector('[data-view=\\'view-management\\']').click()">📋 Giao Bài Tập</button>
-            ${roleEl === 'admin' || roleEl === 'teacher' ? `<button class="btn btn-outline" onclick="window.showCustomAlert('Tính năng quản lý từ vựng đang phát triển (Task 3.2)', 'success')">📚 Quản Lý Nội Dung</button>` : ''}
-          </div>
-        </div>
+        <div id="dashboard-management-container"></div>
       `;
     }
 
@@ -263,6 +257,11 @@ export async function renderDashboard() {
       const btnStart = document.getElementById('btn-start-learning-dashboard');
       if (btnStart) btnStart.click();
     };
+
+    // Render Data Grid Quản lý
+    if (roleEl === 'admin' || roleEl === 'teacher' || roleEl === 'parent') {
+      renderManagement('dashboard-management-container');
+    }
 
   } catch (error) {
     viewDashboard.innerHTML = `

@@ -6,8 +6,8 @@ import { collection, getDocs, doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc,
 /**
  * Render giao diện Quản lý (Management)
  */
-export async function renderManagement() {
-  const viewManagement = document.getElementById('view-management');
+export async function renderManagement(containerId = 'dashboard-management-container') {
+  const viewManagement = document.getElementById(containerId);
   const user = getCurrentUser();
   const roleElNode = document.querySelector('.user-role-class');
   const roleEl = roleElNode ? roleElNode.textContent.toLowerCase() : 'child';
@@ -93,24 +93,6 @@ export async function renderManagement() {
             <button id="btn-search-word" class="btn btn-outline">Tìm Kiếm</button>
           </div>
           <div id="search-word-results" style="max-height: 200px; overflow-y: auto; background: var(--color-background); border-radius: var(--border-radius-sm);"></div>
-        </div>
-      </div>
-      ` : ''}
-
-      ${(roleEl === 'parent' || roleEl === 'teacher' || roleEl === 'admin') ? `
-      <!-- Accordion: Liên kết học sinh -->
-      <div class="card" style="margin-bottom: var(--spacing-md);">
-        <div class="accordion-header" style="cursor: pointer; display: flex; justify-content: space-between;" onclick="this.nextElementSibling.classList.toggle('hidden')">
-          <h3 style="margin: 0;">🔗 Liên Kết Tài Khoản Học Sinh</h3>
-          <span>▼</span>
-        </div>
-        <div class="accordion-content hidden" style="margin-top: var(--spacing-md); border-top: 1px solid var(--color-border); padding-top: var(--spacing-md);">
-          <p class="text-muted" style="margin-bottom: var(--spacing-sm);">Nhập Email của học sinh (con) để gửi yêu cầu liên kết. Học sinh cần đăng nhập để xác nhận yêu cầu này.</p>
-          
-          <div style="display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-md);">
-            <input type="email" id="link-student-email" class="form-input" placeholder="Email học sinh (VD: con@gmail.com)" style="flex: 1; padding: var(--spacing-sm);">
-            <button id="btn-link-student" class="btn btn-primary">Gửi Yêu Cầu</button>
-          </div>
         </div>
       </div>
       ` : ''}
@@ -285,70 +267,7 @@ export async function renderManagement() {
     });
   }
 
-  // Gắn sự kiện Liên kết học sinh
-  const btnLinkStudent = document.getElementById('btn-link-student');
-  if (btnLinkStudent) {
-    btnLinkStudent.addEventListener('click', async () => {
-      const email = document.getElementById('link-student-email').value.trim();
-      if (!email) {
-        window.showCustomAlert("Vui lòng nhập Email học sinh!", 'error');
-        return;
-      }
-      
-      btnLinkStudent.disabled = true;
-      btnLinkStudent.textContent = "Đang gửi...";
-      
-      try {
-        // Tìm user theo email (chỉ tìm tài khoản child)
-        const usersRef = collection(firestoreDb, "users");
-        const q = query(usersRef, where("email", "==", email), where("role", "==", "child"));
-        const snapshot = await getDocs(q);
-        
-        if (snapshot.empty) {
-          window.showCustomAlert("Không tìm thấy tài khoản Học sinh (Child) nào với Email này!", 'error');
-        } else {
-          const childDoc = snapshot.docs[0];
-          const childData = childDoc.data();
-          
-          if (childData.manager_id) {
-            window.showCustomAlert("Tài khoản này đã được quản lý bởi một người khác. Không thể gửi yêu cầu!", 'error');
-            return;
-          }
-          
-          // Kiểm tra xem đã có request nào pending chưa
-          const reqQuery = query(collection(firestoreDb, "link_requests"), 
-            where("targetId", "==", childDoc.id),
-            where("requesterId", "==", user.uid),
-            where("status", "==", "pending")
-          );
-          const reqSnap = await getDocs(reqQuery);
-          
-          if (!reqSnap.empty) {
-            window.showCustomAlert("Bạn đã gửi yêu cầu liên kết cho tài khoản này rồi, đang chờ xác nhận!", 'warning');
-          } else {
-            // Tạo request liên kết
-            await addDoc(collection(firestoreDb, "link_requests"), {
-              requesterId: user.uid,
-              requesterName: user.displayName || user.email,
-              requesterRole: roleEl,
-              targetEmail: email,
-              targetId: childDoc.id,
-              status: 'pending',
-              createdAt: new Date().toISOString()
-            });
-            
-            window.showCustomAlert("Đã gửi yêu cầu liên kết! Chờ học sinh đăng nhập để xác nhận.", 'success');
-            document.getElementById('link-student-email').value = '';
-          }
-        }
-      } catch (error) {
-        window.showCustomAlert("Lỗi khi gửi yêu cầu: " + error.message, 'error');
-      } finally {
-        btnLinkStudent.disabled = false;
-        btnLinkStudent.textContent = "Gửi Yêu Cầu";
-      }
-    });
-  }
+
 
   // Load danh sách học sinh (Task 3.3 & 3.4)
   loadStudentsGrid();
@@ -364,11 +283,8 @@ async function loadStudentsGrid() {
     const usersRef = collection(firestoreDb, "users");
     let q;
 
-    if (role === 'admin') {
-      // Admin xem tất cả học sinh
-      q = query(usersRef, where("role", "==", "child"));
-    } else if (role === 'parent' || role === 'teacher') {
-      // Parent/Teacher có quyền ngang nhau, chỉ 1 manager duy nhất
+    if (role === 'admin' || role === 'parent' || role === 'teacher') {
+      // Dù là Admin, Parent hay Teacher, chỉ được thấy học sinh mà mình đã liên kết (làm Manager)
       q = query(usersRef, where("manager_id", "==", user.uid));
     } else {
       throw new Error("Không đủ quyền truy cập bảng điều khiển");

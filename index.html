@@ -30,7 +30,7 @@
         <!-- User Profile Area Mobile -->
         <div>
           <div id="user-profile-mobile" class="user-profile-class hidden" style="display: flex; flex-direction: column; gap: 4px;">
-            <span class="user-name-class" style="font-weight: 600; font-size: 1.2rem;">Guest</span>
+            <span class="user-name-class" id="btn-open-account-panel" style="font-weight: 600; font-size: 1.2rem; cursor: pointer; text-decoration: underline;" title="Quản lý tài khoản">Guest</span>
             <span class="user-role-class badge badge-warning" style="align-self: flex-start; display: none;">Unauthenticated</span>
             <button class="logout-btn-class btn btn-outline btn-sm" style="margin-top: 8px;">Đăng Xuất</button>
           </div>
@@ -40,7 +40,6 @@
       </div>
       <nav id="mobile-nav" style="display: flex; flex-direction: column; gap: var(--spacing-md); font-size: 1.2rem;">
         <a href="#" data-route="dashboard" class="mobile-menu-link active">Dashboard</a>
-        <a href="#" data-route="management" class="mobile-menu-link hidden role-parent role-teacher">Quản Lý Lớp/Con</a>
         <a href="#" data-route="settings" class="mobile-menu-link">Cài Đặt</a>
       </nav>
     </div>
@@ -76,13 +75,7 @@
       </div>
     </section>
 
-    <!-- View Management -->
-    <section id="view-management" class="view-section hidden">
-      <h2>Danh Sách Học Sinh</h2>
-      <div class="data-grid">
-        <!-- Sẽ được fill bằng JS -->
-      </div>
-    </section>
+
 
     <!-- View Settings -->
     <section id="view-settings" class="view-section hidden">
@@ -112,6 +105,33 @@
     <!-- Khu vực load nội dung footer.js -->
     <div id="external-footer-content"></div>
   </footer>
+
+  <!-- Account Management Panel -->
+  <div id="account-management-panel" class="custom-alert-overlay hidden" style="align-items: center; justify-content: center; z-index: 10000; padding: var(--spacing-md); position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5);">
+    <div class="card" style="width: 100%; max-width: 500px; position: relative; background: var(--color-surface); box-shadow: var(--shadow-lg);">
+      <button id="close-account-panel-btn" style="position: absolute; top: var(--spacing-sm); right: var(--spacing-sm); background: none; border: none; font-size: 1.2rem; cursor: pointer; color: var(--color-text-main);">✖</button>
+      <h2 style="margin-bottom: var(--spacing-lg);">⚙ Quản Lý Tài Khoản</h2>
+      
+      <!-- Change Name -->
+      <div style="margin-bottom: var(--spacing-lg);">
+        <label style="display: block; font-weight: 600; margin-bottom: var(--spacing-sm);">Tên hiển thị (Tự đổi):</label>
+        <div style="display: flex; gap: var(--spacing-sm);">
+          <input type="text" id="account-display-name" class="form-input" style="flex: 1;" placeholder="VD: Bé An, Mẹ Lan...">
+          <button id="btn-update-name" class="btn btn-primary">Cập nhật</button>
+        </div>
+      </div>
+
+      <!-- Link Account -->
+      <div id="account-link-section" style="padding-top: var(--spacing-lg); border-top: 1px solid var(--color-border); display: none;">
+        <label style="display: block; font-weight: 600; margin-bottom: var(--spacing-sm);">🔗 Liên kết tài khoản Học sinh (Child):</label>
+        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: var(--spacing-sm);">Nhập email của học sinh để gửi yêu cầu liên kết. (Dành cho Phụ huynh / Giáo viên)</p>
+        <div style="display: flex; gap: var(--spacing-sm);">
+          <input type="email" id="link-student-email" class="form-input" style="flex: 1;" placeholder="Email học sinh (VD: con@gmail.com)">
+          <button id="btn-link-student" class="btn btn-outline">Gửi Yêu Cầu</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Scripts -->
   <script type="module" src="./js/app.js"></script>
